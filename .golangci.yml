@@ -6,6 +6,7 @@ run:
 linters:
   default: none
   enable:
+    - bavovna
     # ===== correctness =====
     - errcheck
     - govet
@@ -107,6 +108,11 @@ linters:
     - wsl_v5
 
   settings:
+    custom:
+      bavovna:
+        type: module
+        description: bavovna-lint analyzers (appendr, elser, readall).
+        original-url: github.com/gopkgz/bavovna-lint
     govet:
       enable-all: true
       disable:
