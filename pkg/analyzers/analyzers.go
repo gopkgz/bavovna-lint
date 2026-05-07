@@ -9,7 +9,6 @@ import (
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/gopkgz/bavovna-lint/pkg/analyzers/nolinter"
-	"github.com/gopkgz/bavovna-lint/pkg/config"
 	"github.com/gopkgz/bavovna-lint/pkg/reports"
 )
 
@@ -18,8 +17,7 @@ import (
 type InspectFunc func(n ast.Node, importAliases map[string]string, lastPos token.Pos) []reports.Report
 
 // Analyze generates a `run` function for a linter, based on a simple template:
-// it does filtering based on configured glob patterns;
-// it collects import aliases and sends it as a linter function param
+// it collects import aliases and sends it as a linter function param;
 // it collects reports from a linter function and checks them against nolint rules.
 func Analyze(inspectFunc InspectFunc) func(pass *analysis.Pass) (any, error) {
 	return func(pass *analysis.Pass) (any, error) {
@@ -33,17 +31,8 @@ func Analyze(inspectFunc InspectFunc) func(pass *analysis.Pass) (any, error) {
 	}
 }
 
-// processFile is the per-file pipeline: skip-check, inspect, emit.
+// processFile is the per-file pipeline: inspect, emit.
 func processFile(pass *analysis.Pass, file *ast.File, inspectFunc InspectFunc) error {
-	skip, err := config.ShouldSkip(pass.Fset.File(file.Pos()).Name())
-	if err != nil {
-		return fmt.Errorf("config.ShouldSkip: %w", err)
-	}
-
-	if skip {
-		return nil
-	}
-
 	possibleReports, err := runInspector(file, inspectFunc)
 	if err != nil {
 		return err

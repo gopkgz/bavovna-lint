@@ -10,7 +10,7 @@ import (
 
 // Analyzer required by other analyzers to have access to source code comments matchin //nolint pattern.
 //
-//nolint:gochecknoglobals,exhaustruct // exported Analyzer per analyzer-tool convention (singlechecker / vettool); analysis.Analyzer.Flags zero value (flag.FlagSet) is the documented default.
+//nolint:gochecknoglobals,exhaustruct // exported Analyzer per analysis package convention; analysis.Analyzer.Flags zero value (flag.FlagSet) is the documented default.
 var Analyzer = &analysis.Analyzer{
 	Name:       "nolinter",
 	Doc:        "required by other analyzers to have access to source code comments matchin //nolint pattern",

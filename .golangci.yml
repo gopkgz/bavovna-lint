@@ -212,10 +212,6 @@ linters:
           - gochecknoglobals
           - funcorder
           - godoclint
-      # orphan placeholder file; intentional `println` for build sanity check
-      - path: ^main\.go$
-        linters:
-          - forbidigo
 
 formatters:
   enable:
