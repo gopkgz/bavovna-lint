@@ -1,0 +1,227 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    # ===== correctness =====
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # ===== error handling =====
+    - errname
+    - errorlint
+    - nilerr
+    - nilnil
+    - wrapcheck
+    # ===== complexity =====
+    - cyclop
+    - funlen
+    - gocognit
+    - gocyclo
+    - nestif
+    # ===== security =====
+    - gosec
+    # ===== imports / modules =====
+    - depguard
+    - gomoddirectives
+    # ===== style + bugs =====
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - copyloopvar
+    - dupl
+    - durationcheck
+    - embeddedstructfieldcheck
+    - exhaustive
+    - exhaustruct
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    - goconst
+    - gocritic
+    - godoclint
+    - godot
+    - goprintffuncname
+    - grouper
+    - iface
+    - importas
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - iotamixing
+    - ireturn
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - mnd
+    - modernize
+    - musttag
+    - nakedret
+    - nilnesserr
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - tagalign
+    - tagliatelle
+    - testableexamples
+    - testifylint
+    - testpackage
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - wsl_v5
+
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    cyclop:
+      max-complexity: 30
+      package-average: 10.0
+    funlen:
+      lines: 100
+      statements: 50
+    gocognit:
+      min-complexity: 20
+    gocyclo:
+      min-complexity: 15
+    nestif:
+      min-complexity: 5
+    nakedret:
+      max-func-lines: 0
+    exhaustruct:
+      allow-empty-returns: true
+    varnamelen:
+      max-distance: 6
+      min-name-length: 2
+      ignore-names:
+        - n
+        - r
+        - i
+        - j
+        - k
+        - ok
+        - tt
+        - tc
+        - id
+        - fn
+    depguard:
+      rules:
+        deprecated:
+          files:
+            - "$all"
+          deny:
+            - pkg: io/ioutil
+              desc: io/ioutil is deprecated; use io and os.
+            - pkg: github.com/golang/protobuf
+              desc: use google.golang.org/protobuf instead.
+            - pkg: github.com/satori/go.uuid
+              desc: unmaintained; use github.com/google/uuid instead.
+            - pkg: github.com/gofrs/uuid$
+              desc: use github.com/gofrs/uuid/v5 or later (v5+ is a Go module).
+        non-test:
+          files:
+            - "!$test"
+          deny:
+            - pkg: math/rand$
+              desc: use math/rand/v2.
+    revive:
+      severity: warning
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: var-declaration
+
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+    paths:
+      - testdata
+      - vendor
+      - ".*\\.pb\\.go$"
+      - ".*\\.twirp\\.go$"
+    rules:
+      # tests get blanket relaxation on noisy linters
+      - path: _test\.go
+        linters:
+          - funlen
+          - gosec
+          - errcheck
+          - dupl
+          - gocognit
+          - gocyclo
+          - cyclop
+          - forcetypeassert
+          - noctx
+          - wrapcheck
+          - varnamelen
+          - exhaustruct
+          - testpackage # tests share package to access unexported analyzer constants
+          - mnd
+          - goconst
+          - gochecknoglobals
+          - funcorder
+          - godoclint
+      # orphan placeholder file; intentional `println` for build sanity check
+      - path: ^main\.go$
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - golines
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/gopkgz/bavovna-lint
+    golines:
+      max-len: 120
+
+issues:
+  max-same-issues: 50
