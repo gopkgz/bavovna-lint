@@ -8,45 +8,57 @@ opinionated golang linters
 - `pkg/analyzers/elser` - `else` statements usage linter
 - `pkg/analyzers/readall` - `ioutil.ReadAll` usage linter
 
-# ioutil.ReadAll linter only
+## Usage
 
-```
-go get -u github.com/gopkgz/bavovna-lint/cmd/bavovna-lint
-go vet -vettool ~/bin/bavovna-lint
-```
+bavovna-lint ships as a [golangci-lint module plugin](https://golangci-lint.run/plugins/module-plugins/). Add it to your `.custom-gcl.yml`:
 
-# All linters
-
-```
-go get -u github.com/gopkgz/bavovna-lint/cmd/bavovna-lint-all
-go vet -vettool ~/bin/bavovna-lint-all ./...
-```
-
-# Skip files/directories
-
-Set `IGNORE` environment variable to comma-separated glob-like file patterns.
-
-Examples:
-- `IGNORE="**/*_test.go"` ignores all the test files
-- `IGNORE="**/cmd/**"` ignores everything under cmd directory
-
-```
-IGNORE="**/*_test.go" go vet -vettool ~/bin/bavovna-lint-all ./...
+```yaml
+version: v2.12.2
+name: custom-gcl
+destination: .
+plugins:
+  - module: github.com/gopkgz/bavovna-lint
+    version: vX.Y.Z
 ```
 
-NOTE: uses [github.com/gobwas/glob](https://github.com/gobwas/glob) with `'/'` separator.
+Build a custom golangci-lint binary:
+
+```
+golangci-lint custom
+```
+
+Enable `bavovna` in `.golangci.yml`:
+
+```yaml
+linters:
+  enable:
+    - bavovna
+  settings:
+    custom:
+      bavovna:
+        type: module
+        description: bavovna-lint analyzers (appendr, elser, readall).
+        original-url: github.com/gopkgz/bavovna-lint
+```
+
+Run:
+
+```
+./custom-gcl run ./...
+```
+
+Skip files via the standard golangci-lint `issues.exclude-rules` / `run.exclude-dirs` mechanisms in `.golangci.yml`.
 
 ## Building and running from source
 
 ```
-make build
-go vet -vettool ./build/bin/bavovna-lint-all ./...
+make lint    # builds custom-gcl and runs it on this repo
 ```
 
 ## Development
 
 ```
-make ci      # vet + fmt + lint + self-lint + test
+make ci      # vet + fmt + lint + test
 make cover   # coverage HTML at build/coverage.html
 make clean   # remove build/
 ```

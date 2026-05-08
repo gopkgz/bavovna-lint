@@ -3,7 +3,7 @@ module github.com/gopkgz/bavovna-lint
 go 1.25.7
 
 require (
-	github.com/gobwas/glob v0.2.3
+	github.com/golangci/plugin-module-register v0.1.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/tools v0.44.0
 )
