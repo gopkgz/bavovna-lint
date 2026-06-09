@@ -14,24 +14,31 @@ import (
 
 //nolint:gochecknoinits // register.Plugin must run at package init per golangci-lint plugin contract.
 func init() {
-	register.Plugin("bavovna", New)
+	// bavovna bundles all three analyzers under one linter name (back-compat).
+	// appendr/elser/readall expose each analyzer as its own linter so that a
+	// per-analyzer nolint directive is recognized by golangci-lint and findings
+	// are attributed to that name. Enable EITHER the bundle OR the individual
+	// linters — never both, or the same check runs under two linter names.
+	register.Plugin("bavovna", newPlugin(appendr.Analyzer, elser.Analyzer, readall.Analyzer))
+	register.Plugin("appendr", newPlugin(appendr.Analyzer))
+	register.Plugin("elser", newPlugin(elser.Analyzer))
+	register.Plugin("readall", newPlugin(readall.Analyzer))
 }
 
-// New constructs the plugin. Settings are unused — analyzers ship their own flags.
-//
-//nolint:ireturn // register.LinterPlugin return type fixed by golangci-lint plugin contract.
-func New(_ any) (register.LinterPlugin, error) {
-	return &bavovnaPlugin{}, nil
+// newPlugin returns a constructor exposing the given analyzers as one linter.
+// Settings are unused — analyzers ship their own flags.
+func newPlugin(analyzers ...*analysis.Analyzer) register.NewPlugin {
+	return func(_ any) (register.LinterPlugin, error) {
+		return &bavovnaPlugin{analyzers: analyzers}, nil
+	}
 }
 
-type bavovnaPlugin struct{}
+type bavovnaPlugin struct {
+	analyzers []*analysis.Analyzer
+}
 
 func (b *bavovnaPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
-	return []*analysis.Analyzer{
-		appendr.Analyzer,
-		elser.Analyzer,
-		readall.Analyzer,
-	}, nil
+	return b.analyzers, nil
 }
 
 func (b *bavovnaPlugin) GetLoadMode() string {

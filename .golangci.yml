@@ -6,7 +6,9 @@ run:
 linters:
   default: none
   enable:
-    - bavovna
+    - appendr
+    - elser
+    - readall
     # ===== correctness =====
     - errcheck
     - govet
@@ -109,9 +111,17 @@ linters:
 
   settings:
     custom:
-      bavovna:
+      appendr:
         type: module
-        description: bavovna-lint analyzers (appendr, elser, readall).
+        description: flags append usage.
+        original-url: github.com/gopkgz/bavovna-lint
+      elser:
+        type: module
+        description: flags unnecessary else.
+        original-url: github.com/gopkgz/bavovna-lint
+      readall:
+        type: module
+        description: flags ioutil.ReadAll usage.
         original-url: github.com/gopkgz/bavovna-lint
     govet:
       enable-all: true

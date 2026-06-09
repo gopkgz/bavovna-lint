@@ -8,17 +8,16 @@ import (
 
 	"golang.org/x/tools/go/analysis"
 
-	"github.com/gopkgz/bavovna-lint/pkg/analyzers/nolinter"
 	"github.com/gopkgz/bavovna-lint/pkg/reports"
 )
 
 // InspectFunc core logic of the linter, acts on an ast.Node, traversed depth-first
-// returns possible lint violations, that will be further inspected for nolint rules.
+// returns possible lint violations.
 type InspectFunc func(n ast.Node, importAliases map[string]string, lastPos token.Pos) []reports.Report
 
 // Analyze generates a `run` function for a linter, based on a simple template:
 // it collects import aliases and sends it as a linter function param;
-// it collects reports from a linter function and checks them against nolint rules.
+// it collects reports from a linter function and emits them as diagnostics.
 func Analyze(inspectFunc InspectFunc) func(pass *analysis.Pass) (any, error) {
 	return func(pass *analysis.Pass) (any, error) {
 		for _, file := range pass.Files {
@@ -105,13 +104,10 @@ func collectImportAlias(n ast.Node, importAliases map[string]string) error {
 	return nil
 }
 
-// emitReports filters reports through nolinter and emits them on the analysis.Pass.
+// emitReports emits the collected reports as diagnostics on the analysis.Pass.
+// Suppression is delegated to the host (golangci-lint handles nolint directives).
 func emitReports(pass *analysis.Pass, possibleReports []*reports.Report) {
 	for _, report := range possibleReports {
-		if nolinter.IsSupressed(pass, report.Pos, report.NextTokenPos) {
-			continue
-		}
-
 		pass.Report(analysis.Diagnostic{
 			Pos:            report.Pos,
 			End:            report.NextTokenPos,

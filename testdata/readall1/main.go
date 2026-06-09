@@ -15,7 +15,7 @@ func main() {
 	defer f.Close()
 	r1 := io.LimitReader(f, 100)
 	r2 := io.LimitReader(f, 200)
-	res, err := ioutil.ReadAll(r1) //nolint
+	res, err := ioutil.ReadAll(r1) // want `ioutil.ReadAll`
 	if err != nil {
 		log.Panic(err)
 	}
