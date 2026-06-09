@@ -7,7 +7,6 @@ import (
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/gopkgz/bavovna-lint/pkg/analyzers"
-	"github.com/gopkgz/bavovna-lint/pkg/analyzers/nolinter"
 	"github.com/gopkgz/bavovna-lint/pkg/reports"
 )
 
@@ -18,10 +17,9 @@ const analyzerMsg = "else is unnecessary, prefer early termination"
 //
 //nolint:gochecknoglobals,exhaustruct // exported Analyzer per analysis package convention; analysis.Analyzer.Flags zero value (flag.FlagSet) is the documented default.
 var Analyzer = &analysis.Analyzer{
-	Name:     analyzerName,
-	Doc:      "finds else statements in the code",
-	Run:      analyzers.Analyze(run),
-	Requires: []*analysis.Analyzer{nolinter.Analyzer},
+	Name: analyzerName,
+	Doc:  "finds else statements in the code",
+	Run:  analyzers.Analyze(run),
 }
 
 func run(n ast.Node, importAliases map[string]string, lastPos token.Pos) []reports.Report {

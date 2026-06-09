@@ -12,6 +12,8 @@ import (
 func TestElser(t *testing.T) {
 	t.Parallel()
 
+	require.Empty(t, Analyzer.Requires)
+
 	testdata, err := filepath.Abs("../../../testdata/elser")
 	if err != nil {
 		log.Fatal(err)
@@ -20,7 +22,7 @@ func TestElser(t *testing.T) {
 	res := analysistest.Run(t, testdata, Analyzer, "")
 	require.NotNil(t, res)
 	require.NotEmpty(t, res)
-	require.Len(t, res[0].Diagnostics, 1)
+	require.Len(t, res[0].Diagnostics, 2)
 
 	diagRes := res[0].Diagnostics[0]
 	require.Equal(t, analyzerName, diagRes.Category)
