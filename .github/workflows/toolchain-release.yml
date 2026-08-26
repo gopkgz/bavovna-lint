@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: toolchain-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -18,6 +18,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Resolve versions
         id: versions
         env:
@@ -29,7 +34,6 @@ jobs:
           gcl=$(jq -r .tag_name <<< "$gcl_release")
           bavovna=$(jq -r .sha <<< "$bavovna_commit")
           go=$(jq -r 'map(select(.stable))[0].version' <<< "$go_releases")
-          architecture=linux-amd64
           version=0.1.0
           latest_tag=$(
             gh api --paginate repos/${{ github.repository }}/releases \
@@ -44,15 +48,25 @@ jobs:
             mkdir -p "$previous_dir"
             gh release download "$latest_tag" --repo "$GITHUB_REPOSITORY" \
               --pattern manifest.json --dir "$previous_dir"
+            previous_target=$(gh release view "$latest_tag" --repo "$GITHUB_REPOSITORY" \
+              --json targetCommitish --jq .targetCommitish)
             if jq -e \
               --arg gcl "$gcl" \
               --arg bavovna "$bavovna" \
               --arg go "$go" \
               '.golangciLint.version == $gcl and .bavovnaLint.commit == $bavovna and .go.version == $go' \
               "$previous_dir/manifest.json" >/dev/null; then
-              echo "exists=true" >> "$GITHUB_OUTPUT"
               version=${latest_tag#bavovna-lint-}
               version=${version%-linux-amd64}
+              amd64_tag="bavovna-lint-$version-linux-amd64"
+              arm64_tag="bavovna-lint-$version-linux-arm64"
+              amd64_ready=$(gh release view "$amd64_tag" --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,isPrerelease --jq '(.isDraft == false) and (.isPrerelease == false)' 2>/dev/null || true)
+              arm64_ready=$(gh release view "$arm64_tag" --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,isPrerelease --jq '(.isDraft == false) and (.isPrerelease == false)' 2>/dev/null || true)
+              if [ "$amd64_ready" = true ] && [ "$arm64_ready" = true ]; then
+                echo "exists=true" >> "$GITHUB_OUTPUT"
+              fi
             else
               previous_version=${latest_tag#bavovna-lint-}
               previous_version=${previous_version%-linux-amd64}
@@ -60,37 +74,25 @@ jobs:
               version="$major.$minor.$((patch + 1))"
             fi
           fi
-          tag="bavovna-lint-$version-$architecture"
+          if [ -n "${previous_target:-}" ] && [ "$previous_target" != "$bavovna" ]; then
+            changes=$(git log --first-parent --format='- %s' "$previous_target..$bavovna")
+          elif [ -z "${previous_target:-}" ]; then
+            changes=$(git log --first-parent --format='- %s' "$bavovna")
+          else
+            changes=$(gh release view "$latest_tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+              | sed -n '/^Changes$/,$p' | tail -n +2)
+          fi
+          test -n "$changes"
           {
             echo "gcl=$gcl"
             echo "bavovna=$bavovna"
             echo "go=$go"
             echo "setup_go=${go#go}"
-            echo "architecture=$architecture"
             echo "version=$version"
-            echo "tag=$tag"
+            echo "changes<<EOF"
+            printf '%s\n' "$changes"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Check release
-        id: release
-        if: steps.versions.outputs.exists != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.versions.outputs.tag }}
-        run: |
-          if draft=$(gh release view --repo "$GITHUB_REPOSITORY" "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
-            if [ "$draft" = "true" ]; then
-              gh release delete --repo "$GITHUB_REPOSITORY" "$TAG" --yes
-            else
-              echo "exists=true" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        if: steps.versions.outputs.exists != 'true'
-        with:
-          ref: ${{ steps.versions.outputs.bavovna }}
-          persist-credentials: false
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: steps.versions.outputs.exists != 'true'
@@ -101,94 +103,116 @@ jobs:
       - name: Build
         if: steps.versions.outputs.exists != 'true'
         env:
-          ARCHITECTURE: ${{ steps.versions.outputs.architecture }}
           BUNDLE_VERSION: ${{ steps.versions.outputs.version }}
           GCL_VERSION: ${{ steps.versions.outputs.gcl }}
           BAVOVNA_SHA: ${{ steps.versions.outputs.bavovna }}
           GO_VERSION: ${{ steps.versions.outputs.go }}
           CGO_ENABLED: "0"
           GOOS: linux
-          GOARCH: amd64
           GOTOOLCHAIN: local
           GOFLAGS: -trimpath
         run: |
-          mkdir -p dist
-          GOBIN="$PWD/dist" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$GCL_VERSION"
+          mkdir -p build-tools dist
+          GOBIN="$PWD/build-tools" GOARCH=amd64 \
+            go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$GCL_VERSION"
           sed -i "s/^version: .*/version: $GCL_VERSION/" .custom-gcl.yml
           sed -i "/^[[:space:]]*path: \.$/c\    version: $BAVOVNA_SHA" .custom-gcl.yml
-          ./dist/golangci-lint custom
-          mv build/bin/custom-gcl "dist/bavovna-lint-$BUNDLE_VERSION-$ARCHITECTURE"
-          mv dist/golangci-lint "dist/golangci-lint-$BUNDLE_VERSION-$ARCHITECTURE"
-          "./dist/golangci-lint-$BUNDLE_VERSION-$ARCHITECTURE" version | grep -F " has version ${GCL_VERSION#v} "
-          go version -m "dist/golangci-lint-$BUNDLE_VERSION-$ARCHITECTURE" > stock-build-info.txt
-          go version -m "dist/bavovna-lint-$BUNDLE_VERSION-$ARCHITECTURE" > build-info.txt
-          head -n 1 stock-build-info.txt | grep -F "$GO_VERSION"
-          head -n 1 build-info.txt | grep -F "$GO_VERSION"
-          grep -F "github.com/golangci/golangci-lint/v2" build-info.txt | grep -F "$GCL_VERSION"
-          grep -F "github.com/gopkgz/bavovna-lint" build-info.txt | grep -F -- "-${BAVOVNA_SHA:0:12}"
-          sha256sum "dist/golangci-lint-$BUNDLE_VERSION-$ARCHITECTURE" \
-            "dist/bavovna-lint-$BUNDLE_VERSION-$ARCHITECTURE" \
-            | sed 's#  dist/#  #' > SHA256SUMS
+          for architecture in linux-amd64 linux-arm64; do
+            goarch=${architecture#linux-}
+            output="dist/$architecture"
+            mkdir -p "$output/stock"
+            GOBIN="$PWD/$output/stock" GOARCH="$goarch" \
+              go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$GCL_VERSION"
+            rm -rf build
+            GOARCH="$goarch" ./build-tools/golangci-lint custom
+            mv "$output/stock/golangci-lint" "$output/golangci-lint-$BUNDLE_VERSION-$architecture"
+            mv build/bin/custom-gcl "$output/bavovna-lint-$BUNDLE_VERSION-$architecture"
+            go version -m "$output/golangci-lint-$BUNDLE_VERSION-$architecture" > "$output/stock-build-info.txt"
+            go version -m "$output/bavovna-lint-$BUNDLE_VERSION-$architecture" > "$output/build-info.txt"
+            head -n 1 "$output/stock-build-info.txt" | grep -F "$GO_VERSION"
+            head -n 1 "$output/build-info.txt" | grep -F "$GO_VERSION"
+            grep -F "github.com/golangci/golangci-lint/v2" "$output/build-info.txt" | grep -F "$GCL_VERSION"
+            grep -F "github.com/gopkgz/bavovna-lint" "$output/build-info.txt" | grep -F -- "-${BAVOVNA_SHA:0:12}"
+            sha256sum "$output/golangci-lint-$BUNDLE_VERSION-$architecture" \
+              "$output/bavovna-lint-$BUNDLE_VERSION-$architecture" \
+              | sed "s#  $output/#  #" > "$output/SHA256SUMS"
+          done
 
       - name: Write manifest
         if: steps.versions.outputs.exists != 'true'
         env:
-          ARCHITECTURE: ${{ steps.versions.outputs.architecture }}
           BUNDLE_VERSION: ${{ steps.versions.outputs.version }}
           GCL_VERSION: ${{ steps.versions.outputs.gcl }}
           BAVOVNA_SHA: ${{ steps.versions.outputs.bavovna }}
           GO_VERSION: ${{ steps.versions.outputs.go }}
-          TAG: ${{ steps.versions.outputs.tag }}
         run: |
-          gcl_file="golangci-lint-$BUNDLE_VERSION-$ARCHITECTURE"
-          bavovna_file="bavovna-lint-$BUNDLE_VERSION-$ARCHITECTURE"
-          gcl_sha=$(sha256sum "dist/$gcl_file" | cut -d' ' -f1)
-          bavovna_sha=$(sha256sum "dist/$bavovna_file" | cut -d' ' -f1)
-          jq -n \
-            --arg tag "$TAG" \
-            --arg bundle_version "$BUNDLE_VERSION" \
-            --arg architecture "$ARCHITECTURE" \
-            --arg gcl_version "$GCL_VERSION" \
-            --arg gcl_file "$gcl_file" \
-            --arg gcl_sha256 "$gcl_sha" \
-            --arg bavovna_commit "$BAVOVNA_SHA" \
-            --arg bavovna_file "$bavovna_file" \
-            --arg bavovna_sha256 "$bavovna_sha" \
-            --arg go_version "$GO_VERSION" \
-            '{
-              schemaVersion: 1,
-              tag: $tag,
-              release: {version: $bundle_version, architecture: $architecture},
-              platform: {os: "linux", arch: "amd64"},
-              golangciLint: {version: $gcl_version, file: $gcl_file, sha256: $gcl_sha256},
-              bavovnaLint: {commit: $bavovna_commit, file: $bavovna_file, sha256: $bavovna_sha256},
-              go: {version: $go_version}
-            }' > manifest.json
+          for architecture in linux-amd64 linux-arm64; do
+            output="dist/$architecture"
+            arch=${architecture#linux-}
+            tag="bavovna-lint-$BUNDLE_VERSION-$architecture"
+            gcl_file="golangci-lint-$BUNDLE_VERSION-$architecture"
+            bavovna_file="bavovna-lint-$BUNDLE_VERSION-$architecture"
+            gcl_sha=$(sha256sum "$output/$gcl_file" | cut -d' ' -f1)
+            bavovna_sha=$(sha256sum "$output/$bavovna_file" | cut -d' ' -f1)
+            jq -n \
+              --arg tag "$tag" \
+              --arg bundle_version "$BUNDLE_VERSION" \
+              --arg architecture "$architecture" \
+              --arg arch "$arch" \
+              --arg gcl_version "$GCL_VERSION" \
+              --arg gcl_file "$gcl_file" \
+              --arg gcl_sha256 "$gcl_sha" \
+              --arg bavovna_commit "$BAVOVNA_SHA" \
+              --arg bavovna_file "$bavovna_file" \
+              --arg bavovna_sha256 "$bavovna_sha" \
+              --arg go_version "$GO_VERSION" \
+              '{
+                schemaVersion: 1,
+                tag: $tag,
+                release: {version: $bundle_version, architecture: $architecture},
+                platform: {os: "linux", arch: $arch},
+                golangciLint: {version: $gcl_version, file: $gcl_file, sha256: $gcl_sha256},
+                bavovnaLint: {commit: $bavovna_commit, file: $bavovna_file, sha256: $bavovna_sha256},
+                go: {version: $go_version}
+              }' > "$output/manifest.json"
+          done
 
       - name: Publish
         if: steps.versions.outputs.exists != 'true'
         env:
-          ARCHITECTURE: ${{ steps.versions.outputs.architecture }}
           BUNDLE_VERSION: ${{ steps.versions.outputs.version }}
+          CHANGES: ${{ steps.versions.outputs.changes }}
           GH_TOKEN: ${{ github.token }}
           GCL_VERSION: ${{ steps.versions.outputs.gcl }}
           GO_VERSION: ${{ steps.versions.outputs.go }}
-          TAG: ${{ steps.versions.outputs.tag }}
           BAVOVNA_SHA: ${{ steps.versions.outputs.bavovna }}
         run: |
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$BAVOVNA_SHA" \
-            --title "$TAG" \
-            --notes "Go: $GO_VERSION
-          golangci-lint: $GCL_VERSION
-          Architecture: $ARCHITECTURE
-          CGO: disabled" \
-            --draft
-          gh release upload "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            "dist/golangci-lint-$BUNDLE_VERSION-$ARCHITECTURE" \
-            "dist/bavovna-lint-$BUNDLE_VERSION-$ARCHITECTURE" \
-            SHA256SUMS \
-            manifest.json
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          for architecture in linux-amd64 linux-arm64; do
+            tag="bavovna-lint-$BUNDLE_VERSION-$architecture"
+            if draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null); then
+              if [ "$draft" = false ]; then
+                continue
+              fi
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+            fi
+            notes="$RUNNER_TEMP/$tag.md"
+            printf 'Go: %s\ngolangci-lint: %s\nArchitecture: %s\n\nChanges\n%s\n' \
+              "$GO_VERSION" "$GCL_VERSION" "$architecture" "$CHANGES" > "$notes"
+            output="dist/$architecture"
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$BAVOVNA_SHA" \
+              --title "$tag" \
+              --notes-file "$notes" \
+              --draft
+            gh release upload "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              "$output/golangci-lint-$BUNDLE_VERSION-$architecture" \
+              "$output/bavovna-lint-$BUNDLE_VERSION-$architecture" \
+              "$output/SHA256SUMS" \
+              "$output/manifest.json"
+          done
+          for architecture in linux-amd64 linux-arm64; do
+            tag="bavovna-lint-$BUNDLE_VERSION-$architecture"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          done

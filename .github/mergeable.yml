@@ -1,0 +1,34 @@
+---
+version: 2
+mergeable:
+  # Auto-merge via the hosted Mergeable GitHub App, replacing the hand-rolled
+  # auto-merge.yml workflow + AUTO_MERGE_TOKEN. The app must be installed on the
+  # target repo for this to take effect. See the infra ADR
+  # 2026-06-26-mergeable-app-pr-auto-merge.md.
+  #
+  # Drafts are merged by nobody (GitHub disables merge on drafts). Fork PRs are
+  # out of scope for the single-admin private repos this golden targets.
+  - when: pull_request.*, pull_request_review.*, status.*, check_suite.*
+    name: "Auto-merge once branch protection is satisfied"
+    validate:
+      - do: description
+        must_exclude:
+          regex: '/auto-merge (off|disable)'
+          regex_flag: 'i'
+      # Only the bottom of a PR chain — the PR targeting the repo's default
+      # branch — is auto-merged. Chained/stacked PRs (base = another feature
+      # branch) must wait until they are retargeted. This also covers the
+      # event-safe per-PR hold: any non-default base (auto-merge-hold/* or
+      # otherwise) blocks, and retargeting to the default branch releases it.
+      # Unlike the description validator, baseRef runs for status and
+      # check-suite events. main is rendered per target
+      # by apply-repo-settings.sh (render_template_file).
+      - do: baseRef
+        must_include:
+          regex: '^main$'
+          # Mergeable defaults regex_flag to 'i'; 'none' keeps the match
+          # exact-case so e.g. a branch named 'Main' does not qualify.
+          regex_flag: 'none'
+    pass:
+      - do: merge
+        merge_method: 'squash'

@@ -103,4 +103,4 @@ make clean   # remove build/
 
 ## Releases
 
-Daily `bavovna-lint-<version>-linux-amd64` releases contain matching `golangci-lint` and `bavovna-lint` binaries, checksums, and a build manifest.
+Daily `bavovna-lint-<version>-<architecture>` releases contain matching `golangci-lint` and `bavovna-lint` binaries, checksums, and a build manifest for Linux amd64 and arm64.
