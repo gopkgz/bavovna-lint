@@ -23,10 +23,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gcl=$(gh api repos/golangci/golangci-lint/releases/latest --jq .tag_name)
-          bavovna=$(gh api repos/${{ github.repository }}/commits/main --jq .sha)
-          go=$(curl --fail --silent --show-error 'https://go.dev/dl/?mode=json' | jq -r 'map(select(.stable))[0].version')
-          tag="toolchain-gcl-${gcl#v}-go-${go#go}-bavovna-$bavovna"
+          gcl_release=$(gh api repos/golangci/golangci-lint/releases/latest)
+          bavovna_commit=$(gh api repos/${{ github.repository }}/commits/main)
+          go_releases=$(curl --fail --silent --show-error 'https://go.dev/dl/?mode=json')
+          gcl=$(jq -r .tag_name <<< "$gcl_release")
+          bavovna=$(jq -r .sha <<< "$bavovna_commit")
+          go=$(jq -r 'map(select(.stable))[0].version' <<< "$go_releases")
+          go_commit=$(gh api "repos/golang/go/commits/$go")
+          timestamp=$(
+            printf '%s\n' \
+              "$(jq -r .published_at <<< "$gcl_release")" \
+              "$(jq -r .commit.committer.date <<< "$bavovna_commit")" \
+              "$(jq -r .commit.committer.date <<< "$go_commit")" \
+              | while read -r source_time; do date -u -d "$source_time" +%s; done \
+              | sort -nr \
+              | head -n 1
+          )
+          timestamp=$(date -u -d "@$timestamp" +%Y%m%d%H%M%S)
+          tag="toolchain-gcl-${gcl#v}-at-$timestamp-go-${go#go}-bavovna-$bavovna"
           {
             echo "gcl=$gcl"
             echo "bavovna=$bavovna"
