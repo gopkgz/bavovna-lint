@@ -1,5 +1,5 @@
 # Pin `version` to the latest stable golangci-lint v2 release at build time.
-version: v2.12.2
+version: v2.13.1
 name: custom-gcl
 destination: ./build/bin
 plugins:
