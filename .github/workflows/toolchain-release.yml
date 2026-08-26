@@ -1,0 +1,136 @@
+name: toolchain release
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: toolchain-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gcl=$(gh api repos/golangci/golangci-lint/releases/latest --jq .tag_name)
+          bavovna=$(gh api repos/${{ github.repository }}/commits/main --jq .sha)
+          go=$(curl --fail --silent --show-error 'https://go.dev/dl/?mode=json' | jq -r 'map(select(.stable))[0].version')
+          tag="toolchain-gcl-${gcl#v}-go-${go#go}-bavovna-$bavovna"
+          {
+            echo "gcl=$gcl"
+            echo "bavovna=$bavovna"
+            echo "go=$go"
+            echo "setup_go=${go#go}"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.versions.outputs.tag }}
+        run: |
+          if draft=$(gh release view --repo "$GITHUB_REPOSITORY" "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" = "true" ]; then
+              gh release delete --repo "$GITHUB_REPOSITORY" "$TAG" --yes
+            else
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        if: steps.release.outputs.exists != 'true'
+        with:
+          ref: ${{ steps.versions.outputs.bavovna }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: steps.release.outputs.exists != 'true'
+        with:
+          go-version: ${{ steps.versions.outputs.setup_go }}
+          cache: true
+
+      - name: Build
+        if: steps.release.outputs.exists != 'true'
+        env:
+          GCL_VERSION: ${{ steps.versions.outputs.gcl }}
+          BAVOVNA_SHA: ${{ steps.versions.outputs.bavovna }}
+          GO_VERSION: ${{ steps.versions.outputs.go }}
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+          GOTOOLCHAIN: local
+          GOFLAGS: -trimpath
+        run: |
+          mkdir -p dist
+          GOBIN="$PWD/dist" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$GCL_VERSION"
+          sed -i "s/^version: .*/version: $GCL_VERSION/" .custom-gcl.yml
+          sed -i "s#    path: \.$#    version: $BAVOVNA_SHA#" .custom-gcl.yml
+          ./dist/golangci-lint custom
+          mv build/bin/custom-gcl dist/bavovna-lint
+          ./dist/golangci-lint version | grep -F " has version ${GCL_VERSION#v} "
+          go version -m dist/golangci-lint > stock-build-info.txt
+          go version -m dist/bavovna-lint > build-info.txt
+          head -n 1 stock-build-info.txt | grep -F "$GO_VERSION"
+          head -n 1 build-info.txt | grep -F "$GO_VERSION"
+          grep -F "github.com/golangci/golangci-lint/v2" build-info.txt | grep -F "$GCL_VERSION"
+          grep -F "github.com/gopkgz/bavovna-lint" build-info.txt | grep -F -- "-${BAVOVNA_SHA:0:12}"
+          sha256sum dist/golangci-lint dist/bavovna-lint | sed 's#  dist/#  #' > SHA256SUMS
+
+      - name: Write manifest
+        if: steps.release.outputs.exists != 'true'
+        env:
+          GCL_VERSION: ${{ steps.versions.outputs.gcl }}
+          BAVOVNA_SHA: ${{ steps.versions.outputs.bavovna }}
+          GO_VERSION: ${{ steps.versions.outputs.go }}
+          TAG: ${{ steps.versions.outputs.tag }}
+        run: |
+          gcl_sha=$(sha256sum dist/golangci-lint | cut -d' ' -f1)
+          bavovna_sha=$(sha256sum dist/bavovna-lint | cut -d' ' -f1)
+          jq -n \
+            --arg tag "$TAG" \
+            --arg gcl_version "$GCL_VERSION" \
+            --arg gcl_sha256 "$gcl_sha" \
+            --arg bavovna_commit "$BAVOVNA_SHA" \
+            --arg bavovna_sha256 "$bavovna_sha" \
+            --arg go_version "$GO_VERSION" \
+            '{
+              schemaVersion: 1,
+              tag: $tag,
+              platform: {os: "linux", arch: "amd64"},
+              golangciLint: {version: $gcl_version, file: "golangci-lint", sha256: $gcl_sha256},
+              bavovnaLint: {commit: $bavovna_commit, file: "bavovna-lint", sha256: $bavovna_sha256},
+              go: {version: $go_version}
+            }' > manifest.json
+
+      - name: Publish
+        if: steps.release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.versions.outputs.tag }}
+          BAVOVNA_SHA: ${{ steps.versions.outputs.bavovna }}
+        run: |
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$BAVOVNA_SHA" \
+            --title "$TAG" \
+            --notes "Linux amd64 toolchain binaries." \
+            --draft
+          gh release upload "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            dist/golangci-lint \
+            dist/bavovna-lint \
+            SHA256SUMS \
+            manifest.json
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false

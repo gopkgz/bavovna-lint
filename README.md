@@ -13,7 +13,7 @@ opinionated golang linters
 bavovna-lint ships as a [golangci-lint module plugin](https://golangci-lint.run/plugins/module-plugins/). Add it to your `.custom-gcl.yml`:
 
 ```yaml
-version: v2.12.2
+version: v2.13.1
 name: custom-gcl
 destination: .
 plugins:
@@ -100,3 +100,7 @@ make ci      # vet + fmt + lint + test
 make cover   # coverage HTML at build/coverage.html
 make clean   # remove build/
 ```
+
+## Releases
+
+Daily toolchain releases contain Linux amd64 `golangci-lint` and `bavovna-lint` binaries, checksums, and a build manifest.
