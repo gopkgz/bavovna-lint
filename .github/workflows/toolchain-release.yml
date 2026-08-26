@@ -60,8 +60,11 @@ jobs:
               version=${version%-linux-amd64}
               amd64_tag="bavovna-lint-$version-linux-amd64"
               arm64_tag="bavovna-lint-$version-linux-arm64"
-              if gh release view "$amd64_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-                && gh release view "$arm64_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              amd64_ready=$(gh release view "$amd64_tag" --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,isPrerelease --jq '(.isDraft == false) and (.isPrerelease == false)' 2>/dev/null || true)
+              arm64_ready=$(gh release view "$arm64_tag" --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,isPrerelease --jq '(.isDraft == false) and (.isPrerelease == false)' 2>/dev/null || true)
+              if [ "$amd64_ready" = true ] && [ "$arm64_ready" = true ]; then
                 echo "exists=true" >> "$GITHUB_OUTPUT"
               fi
             else
