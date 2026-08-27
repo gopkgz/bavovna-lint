@@ -19,16 +19,13 @@
       "datasourceTemplate": "go"
     },
     {
+      "description": "Exact Go pins in CI and release workflows",
       "customType": "regex",
-      "managerFilePatterns": ["/images/ci-go-(?:cgo|nocgo)/Dockerfile$/"],
-      "matchStrings": ["ENV GOTOOLCHAIN=go(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "go",
-      "datasourceTemplate": "golang-version"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/\\.github/workflows/go-images\\.ya?ml$/"],
-      "matchStrings": ["GO_VERSION:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "managerFilePatterns": ["/^\\.github/workflows/(?:ci|toolchain-release)\\.yml$/"],
+      "matchStrings": [
+        "GO_VERSION:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)",
+        "GOTOOLCHAIN:\\s*go(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
     }
@@ -38,12 +35,10 @@
       "description": "Keep every Go toolchain pin in one update",
       "groupName": "Go toolchain",
       "matchPackageNames": [
-        "go",
-        "golang",
-        "ghcr.io/gopkgz/bavovna-lint-ci-go-cgo",
-        "ghcr.io/gopkgz/bavovna-lint-ci-go-nocgo"
+        "go"
       ],
-      "rangeStrategy": "bump"
+      "rangeStrategy": "bump",
+      "separateMajorMinor": false
     }
   ]
 }

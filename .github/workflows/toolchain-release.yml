@@ -9,10 +9,15 @@ on:
 
 concurrency:
   group: toolchain-release
-  cancel-in-progress: true
+  # Cancelling can strand a partially published pair of architecture releases.
+  cancel-in-progress: false
 
 permissions:
   contents: write
+
+env:
+  GO_VERSION: 1.27.0
+  GOTOOLCHAIN: go1.27.0
 
 jobs:
   publish:
@@ -30,10 +35,9 @@ jobs:
         run: |
           gcl_release=$(gh api repos/golangci/golangci-lint/releases/latest)
           bavovna_commit=$(gh api repos/${{ github.repository }}/commits/main)
-          go_releases=$(curl --fail --silent --show-error 'https://go.dev/dl/?mode=json')
           gcl=$(jq -r .tag_name <<< "$gcl_release")
           bavovna=$(jq -r .sha <<< "$bavovna_commit")
-          go=$(jq -r 'map(select(.stable))[0].version' <<< "$go_releases")
+          go=$GOTOOLCHAIN
           version=0.1.0
           latest_tag=$(
             gh api --paginate repos/${{ github.repository }}/releases \
@@ -87,7 +91,6 @@ jobs:
             echo "gcl=$gcl"
             echo "bavovna=$bavovna"
             echo "go=$go"
-            echo "setup_go=${go#go}"
             echo "version=$version"
             echo "changes<<EOF"
             printf '%s\n' "$changes"
@@ -97,7 +100,7 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: steps.versions.outputs.exists != 'true'
         with:
-          go-version: ${{ steps.versions.outputs.setup_go }}
+          go-version: ${{ env.GO_VERSION }}
           cache: true
 
       - name: Build
@@ -109,7 +112,6 @@ jobs:
           GO_VERSION: ${{ steps.versions.outputs.go }}
           CGO_ENABLED: "0"
           GOOS: linux
-          GOTOOLCHAIN: local
           GOFLAGS: -trimpath
         run: |
           mkdir -p build-tools dist
