@@ -7,33 +7,45 @@ on:
     branches: [main, master]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: go1.27.0
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    container:
+      image: registry.p73.dev/infra/ci-go-cgo:1.27.0-alpine@sha256:2e7e020ceeedbc6085e0cbf723a9ec0518dcd26fc3e7831ebdf7b60e1822785f
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: true
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Assert Go/cgo contract
+        run: |
+          go version | grep -q 'go1\.27\.0 '
+          test "$(go env GOTOOLCHAIN)" = "$GOTOOLCHAIN"
+          test "$(go env CGO_ENABLED)" = 1
       - run: make vet
       - run: make test
 
   lint:
     runs-on: ubuntu-latest
+    container:
+      image: registry.p73.dev/infra/ci-go-nocgo:1.27.0-alpine@sha256:60cbde59b8742e7251a780b7dea6d7fd4ed4fe6e4b46c5835cedcccfc31d6394
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
-        with:
-          go-version: stable
-          check-latest: true
-          cache: true
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Assert Go/no-cgo contract
+        run: |
+          go version | grep -q 'go1\.27\.0 '
+          test "$(go env GOTOOLCHAIN)" = "$GOTOOLCHAIN"
+          test "$(go env CGO_ENABLED)" = 0
+          ! command -v cc
+          ! command -v gcc
       - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
       - run: make fmt
       - run: make lint
