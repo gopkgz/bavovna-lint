@@ -29,9 +29,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -54,8 +51,37 @@ jobs:
             "images/${{ matrix.image }}"
           scripts/check-go-image-contract.sh "$LOCAL_IMAGE" "${{ matrix.cgo }}"
 
-      - name: Publish immutable tags
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ci-go-nocgo
+            cgo: '0'
+          - image: ci-go-cgo
+            cgo: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Build and verify publication candidate
+        env:
+          LOCAL_IMAGE: local/${{ matrix.image }}:${{ github.sha }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --tag "$LOCAL_IMAGE" \
+            "images/${{ matrix.image }}"
+          scripts/check-go-image-contract.sh "$LOCAL_IMAGE" "${{ matrix.cgo }}"
+
+      - name: Publish immutable tags once
         id: publish
         env:
           GHCR_TOKEN: ${{ github.token }}
@@ -65,23 +91,34 @@ jobs:
           version_ref="${registry_image}:${GO_VERSION}-alpine"
           source_ref="${registry_image}:sha-${GITHUB_SHA}"
           local_image="local/${IMAGE}:${GITHUB_SHA}"
+
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if docker manifest inspect "$source_ref" >/dev/null 2>&1; then
+            digest=$(docker buildx imagetools inspect "$source_ref" --format '{{json .Manifest}}' | jq -r .digest)
+            test "$digest" != null
+            echo "::notice::source tag already exists; preserving its immutable digest"
+            docker pull "${source_ref}@${digest}"
+            docker tag "${source_ref}@${digest}" "$version_ref"
+            docker push "$version_ref"
+            echo "reference=${source_ref}@${digest}" >> "$GITHUB_OUTPUT"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           docker tag "$local_image" "$version_ref"
           docker tag "$local_image" "$source_ref"
-          docker push "$version_ref"
           docker push "$source_ref"
+          docker push "$version_ref"
           digest=$(docker buildx imagetools inspect "$source_ref" --format '{{json .Manifest}}' | jq -r .digest)
           test "$digest" != null
           echo "reference=${source_ref}@${digest}" >> "$GITHUB_OUTPUT"
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify anonymous immutable pull
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           REFERENCE: ${{ steps.publish.outputs.reference }}
         run: |
-          docker logout ghcr.io
-          docker image rm "local/${{ matrix.image }}:${GITHUB_SHA}" \
-            "ghcr.io/gopkgz/bavovna-lint-${{ matrix.image }}:${GO_VERSION}-alpine" \
-            "ghcr.io/gopkgz/bavovna-lint-${{ matrix.image }}:sha-${GITHUB_SHA}"
+          docker logout ghcr.io || true
+          docker image rm "local/${{ matrix.image }}:${GITHUB_SHA}" || true
           docker pull "$REFERENCE"
           scripts/check-go-image-contract.sh "$REFERENCE" "${{ matrix.cgo }}"

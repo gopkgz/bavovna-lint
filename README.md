@@ -113,6 +113,9 @@ This repository builds its own public Go 1.27.0 Alpine carriers:
 - `ghcr.io/gopkgz/bavovna-lint-ci-go-cgo` for race tests that require cgo
 
 Each publication has an exact Go-version tag and an immutable `sha-<source commit>`
-tag. Consumers pin a tag and digest. The publishing workflow logs out and pulls
-the source tag by digest before accepting it, so a package that is not anonymously
-readable cannot pass publication.
+tag. Consumers pin a tag and digest. A rerun preserves an existing source tag
+instead of pushing it again, while repairing the Go-version tag from that
+preserved digest if an earlier publication stopped partway through. The workflow
+then logs out and pulls the source tag by digest before accepting either a new or
+existing publication, so a package that is not anonymously readable cannot pass
+publication.
