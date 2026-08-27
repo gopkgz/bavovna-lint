@@ -17,6 +17,33 @@
       ],
       "depNameTemplate": "github.com/golangci/golangci-lint/v2",
       "datasourceTemplate": "go"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/images/ci-go-(?:cgo|nocgo)/Dockerfile$/"],
+      "matchStrings": ["ENV GOTOOLCHAIN=go(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/\\.github/workflows/go-images\\.ya?ml$/"],
+      "matchStrings": ["GO_VERSION:\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Keep every Go toolchain pin in one update",
+      "groupName": "Go toolchain",
+      "matchPackageNames": [
+        "go",
+        "golang",
+        "ghcr.io/gopkgz/bavovna-lint-ci-go-cgo",
+        "ghcr.io/gopkgz/bavovna-lint-ci-go-nocgo"
+      ],
+      "rangeStrategy": "bump"
     }
   ]
 }
