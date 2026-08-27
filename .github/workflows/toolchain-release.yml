@@ -9,7 +9,6 @@ on:
 
 concurrency:
   group: toolchain-release
-  # Cancelling can strand a partially published pair of architecture releases.
   cancel-in-progress: false
 
 permissions:
