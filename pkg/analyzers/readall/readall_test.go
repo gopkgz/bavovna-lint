@@ -24,7 +24,7 @@ func TestElser(t *testing.T) {
 			log.Fatal(err)
 		}
 
-		res := analysistest.Run(t, absPath, Analyzer, "")
+		res := analysistest.Run(t, absPath, Analyzer, ".")
 		require.NotNil(t, res)
 		require.NotEmpty(t, res)
 		require.Len(t, res[0].Diagnostics, 2)
