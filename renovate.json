@@ -1,6 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "minimumReleaseAge": "14 days",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
   "customManagers": [
     {
       "customType": "regex",
@@ -39,6 +41,30 @@
       ],
       "rangeStrategy": "bump",
       "separateMajorMinor": false
+    },
+    {
+      "description": "Release-age floor for every datasource; must stay after any preset-derived rule.",
+      "matchDatasources": [
+        "*"
+      ],
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "description": "First-party exemption: own orgs and the private registry. Must be the last age rule.",
+      "matchPackageNames": [
+        "bavovna/**",
+        "github.com/bavovna/**",
+        "revling-ai/**",
+        "github.com/revling-ai/**",
+        "revlingai/**",
+        "github.com/revlingai/**",
+        "lightsoutlabs/**",
+        "github.com/lightsoutlabs/**",
+        "gopkgz/**",
+        "github.com/gopkgz/**",
+        "registry.revling.dev/**"
+      ],
+      "minimumReleaseAge": null
     }
   ]
 }
