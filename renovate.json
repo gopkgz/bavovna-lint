@@ -62,7 +62,12 @@
         "github.com/lightsoutlabs/**",
         "gopkgz/**",
         "github.com/gopkgz/**",
-        "registry.revling.dev/**"
+        "registry.revling.dev/bavovna/**",
+        "registry.revling.dev/infra/**",
+        "registry.revling.dev/lens/**",
+        "registry.revling.dev/lightsout/**",
+        "registry.revling.dev/ouroboros/**",
+        "registry.revling.dev/revling-ai/**"
       ],
       "minimumReleaseAge": null
     }
